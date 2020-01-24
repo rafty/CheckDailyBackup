@@ -93,9 +93,8 @@ Resources:
     Properties:
       Description: check-backup-rule
       Name: am4everyday
-      # ScheduleExpression: cron(0 4 * * ? *)
-      # 4:00 every day (UTC)
-      ScheduleExpression: cron(*/5 * * * ? *)
+       ScheduleExpression: cron(0 19 * * ? *)
+      # JST 04:00 every day (UTC)
       State: ENABLED
       Targets:
         - Arn: !GetAtt CheckAMIFunction.Arn
