@@ -1,0 +1,116 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  Check Daily SSM Backup
+
+
+Parameters:
+
+  NortificationMail:
+    Description: Vpc Flow Logs Alarm
+    Type: String
+    Default: xxxxxxxx@xxx.com
+
+Resources:
+
+# ---------------------------------------------------------------
+#  AWS Lambda
+# ---------------------------------------------------------------
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lambda_cloudwatch_event_role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+
+  LambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: lambda_ssm_automation_policy
+      Roles:
+        - !Ref LambdaRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - cloudwatch:*
+              - logs:*
+              - ec2:*
+              - sns:Publish
+            Effect: Allow
+            Resource:
+              - '*'
+
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CheckAMIFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CloudWatchEventRule.Arn
+
+
+  CheckAMIFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: CheckBackupAMI
+      Description: CheckBackupAMI
+      Timeout: 60
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.7
+      Role: !GetAtt LambdaRole.Arn
+      CodeUri: lambda_check/
+      Layers:
+        - !Ref LambdaLayer
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref ErrorNotificationTopic
+
+  LambdaLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: Some-1-Lambda-Layer
+      Description: Common Application Resource lfayer
+      ContentUri: lambda/layer
+
+
+# ---------------------------------------------------------------
+#  Amazon CloudWatch Event
+# ---------------------------------------------------------------
+
+  CloudWatchEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: check-backup-rule
+      Name: am4everyday
+      # ScheduleExpression: cron(0 4 * * ? *)
+      # 4:00 every day (UTC)
+      ScheduleExpression: cron(*/5 * * * ? *)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt CheckAMIFunction.Arn
+          Id: lambda
+
+# ---------------------------------------------------------------
+#  Amazon SNS
+# ---------------------------------------------------------------
+
+  ErrorNotificationTopic:
+        Type: AWS::SNS::Topic
+        Properties:
+            DisplayName: SSMBackupErrorNorticifation
+            Subscription:
+                - Endpoint:
+                    Ref: NortificationMail
+                  Protocol: email
+            TopicName: SSMBackupErrorNorticifation
